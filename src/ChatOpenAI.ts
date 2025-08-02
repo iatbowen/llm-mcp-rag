@@ -28,7 +28,8 @@ export default class ChatOpenAI {
     if (context) this.messages.push({ role: 'user', content: context })
   }
 
-  async chat(prompt?: string): Promise<{ content: string; toolCalls: ToolCall[] }> {
+  async *chat(prompt?: string): AsyncGenerator<{ content: string; toolCalls: ToolCall[] }> {
+    logTitle('CHAT')
     try {
       if (prompt) {
         this.messages.push({ role: 'user', content: prompt })
@@ -39,78 +40,85 @@ export default class ChatOpenAI {
         stream: true,
         tools: this.getToolsDefinition(),
       })
-
-      let content = ''
-      let toolCalls: { [key: number]: ToolCall } = {}
-      logTitle('STREAM')
-      for await (const chunk of stream) {
-        // 检查 choices 是否存在且有效
-        if (!chunk.choices || chunk.choices.length === 0) {
-          console.warn('Warning: Invalid chunk.choices detected:', chunk.choices)
+      console.log('processing data...')
+      for await (const message of this.fromChatResponse(stream)) {
+        if (message.content) {
+          yield { content: message.content?.toString() || '', toolCalls: [] }
           continue
         }
-        const delta = chunk.choices[0].delta
-
-        // 处理普通Content
-        if (delta.content) {
-          const contentChunk = delta.content || ''
-          content += contentChunk
-          process.stdout.write(contentChunk)
+        if (message.toolCalls && message.toolCalls.length > 0) {
+          console.log('\ntoolCalls:', message.toolCalls)
+          this.appendMessage('assistant', '', message.toolCalls)
+          yield { content: '', toolCalls: message.toolCalls }
+          continue
         }
-        // 处理ToolCall
-        if (delta.tool_calls && delta.tool_calls.length > 0) {
-          for (const toolCallChunk of delta.tool_calls) {
-            if (toolCallChunk.index === undefined) {
-              console.warn('Warning: toolCallChunk.index is undefined')
-              continue
-            }
-            // 使用 index 作为键
-            if (!toolCalls[toolCallChunk.index]) {
-              toolCalls[toolCallChunk.index] = { id: '', function: { name: '', arguments: '' } }
-            }
-
-            let currentCall = toolCalls[toolCallChunk.index]
-            if (toolCallChunk?.id) {
-              currentCall.id = toolCallChunk?.id || ''
-            }
-            if (toolCallChunk?.function?.name) {
-              currentCall.function.name = toolCallChunk?.function?.name || ''
-            }
-            if (toolCallChunk?.function?.arguments) {
-              currentCall.function.arguments += toolCallChunk?.function?.arguments || ''
-            }
-          }
-        }
-      }
-      // 将字典转换为数组，按 index 排序
-      const sortToolCalls = Object.keys(toolCalls)
-        .map(key => parseInt(key))
-        .sort((a, b) => a - b)
-        .map(index => toolCalls[index])
-
-      console.log('sortToolCalls', sortToolCalls)
-
-      this.messages.push({
-        role: 'assistant',
-        content: content,
-        tool_calls: sortToolCalls.map(call => ({
-          id: call.id,
-          type: 'function',
-          function: call.function,
-        })),
-      })
-
-      return {
-        content: content,
-        toolCalls: sortToolCalls,
       }
     } catch (error: any) {
       logTitle('CHAT ERROR')
       console.error(error)
-      return {
-        content: '',
-        toolCalls: [],
+      yield { content: '', toolCalls: [] }
+    } finally {
+      logTitle('CHAT END')
+    }
+  }
+
+  async *fromChatResponse(
+    stream: AsyncIterable<OpenAI.Chat.ChatCompletionChunk>
+  ): AsyncGenerator<{ content: string; toolCalls: ToolCall[] }> {
+    let toolCalls: { [key: number]: ToolCall } = {}
+    for await (const chunk of stream) {
+      // 检查 choices 是否存在且有效
+      if (!chunk.choices || chunk.choices.length === 0) {
+        console.warn('Warning: Invalid chunk.choices detected:', chunk.choices)
+        continue
       }
+      const delta = chunk.choices[0].delta
+      // 处理普通Content - 立即返回
+      if (delta.content) {
+        yield { content: delta.content, toolCalls: [] }
+        continue
+      }
+      // 处理ToolCall - 累积数据，不立即返回
+      if (delta.tool_calls && delta.tool_calls.length > 0) {
+        for (const toolCallChunk of delta.tool_calls) {
+          if (toolCallChunk.index === undefined) {
+            console.warn('Warning: toolCallChunk.index is undefined')
+            continue
+          }
+          // 使用 index 作为键
+          if (!toolCalls[toolCallChunk.index]) {
+            toolCalls[toolCallChunk.index] = {
+              id: '',
+              function: { name: '', arguments: '' },
+            }
+          }
+          let currentCall = toolCalls[toolCallChunk.index]
+          if (toolCallChunk?.id) {
+            currentCall.id = toolCallChunk?.id || ''
+          }
+          if (toolCallChunk?.function?.name) {
+            currentCall.function.name = toolCallChunk?.function?.name || ''
+          }
+          if (toolCallChunk?.function?.arguments) {
+            currentCall.function.arguments += toolCallChunk?.function?.arguments || ''
+          }
+        }
+      }
+    }
+
+    const sortToolCalls = Object.keys(toolCalls)
+      .map(key => parseInt(key))
+      .sort((a, b) => a - b)
+      .map(index => toolCalls[index])
+    yield {
+      content: '',
+      toolCalls: sortToolCalls.map((tool_call: ToolCall) => ({
+        id: tool_call.id,
+        function: {
+          name: tool_call.function.name,
+          arguments: tool_call.function.arguments,
+        },
+      })),
     }
   }
 
@@ -120,6 +128,24 @@ export default class ChatOpenAI {
       content: toolOutput,
       tool_call_id: toolCallId,
     })
+  }
+  public appendMessage(
+    role: 'user' | 'assistant' | 'tool' | 'system' | 'developer',
+    content: string,
+    tool_calls: ToolCall[] = []
+  ) {
+    const message: any = { role, content }
+    if (role === 'assistant' && tool_calls.length > 0) {
+      message.tool_calls = tool_calls.map(tool_call => ({
+        id: tool_call.id,
+        type: 'function',
+        function: {
+          name: tool_call.function.name,
+          arguments: tool_call.function.arguments,
+        },
+      }))
+    }
+    this.messages.push(message)
   }
 
   private getToolsDefinition(): OpenAI.Chat.Completions.ChatCompletionTool[] {

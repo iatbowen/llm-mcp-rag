@@ -35,14 +35,19 @@ export default class Agent {
 
   async invoke(prompt: string) {
     if (!this.llm) throw new Error('Agent not initialized')
-    let response = await this.llm.chat(prompt)
-    while (true) {
+    let showToolCalls = false
+    for await (const response of this.llm.chat(prompt)) {
+      if (response.content) {
+        process.stdout.write(response.content)
+        continue
+      }
       if (response.toolCalls.length > 0) {
         for (const toolCall of response.toolCalls) {
           const mcp = this.mcpClients.find(client =>
             client.getTools().some((t: any) => t.name === toolCall.function.name)
           )
           if (mcp) {
+            showToolCalls = true
             logTitle(`TOOL USE`)
             let params: Record<string, any> = {}
             if (toolCall.function.arguments) {
@@ -56,13 +61,13 @@ export default class Agent {
             this.llm.appendToolResult(toolCall.id, 'Tool not found')
           }
         }
-        // 工具调用后,继续对话
-        response = await this.llm.chat()
         continue
       }
-      // 没有工具调用,结束对话
-      await this.close()
-      return response.content
     }
+    if (showToolCalls) {
+      // 工具调用后,继续对话
+      await this.invoke('')
+    }
+    await this.close()
   }
 }
