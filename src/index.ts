@@ -73,9 +73,9 @@ async function main_fetch() {
   await agent.close()
 }
 
-main_paid()
+// main_paid()
 // main_free()
-// main_local()
+main_local()
 // main_fetch()
 
 async function retrieveContext() {
