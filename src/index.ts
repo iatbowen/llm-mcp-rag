@@ -24,8 +24,9 @@ async function main_paid() {
   const context =
     'Bret is a woman who lives in a small town in the mountains. She is 30 years old and works as a teacher. She is married to a man named John and has two children, a son named James and a daughter named Emily. She is a very kind and caring person and is loved by all who know her.'
   // Agent
-  const agent = new Agent('deepseek/deepseek-r1-0528', [fetchMCP, fileMCP], '', context)
+  // const agent = new Agent('deepseek/deepseek-r1-0528', [fetchMCP, fileMCP], '', context)
   // const agent = new Agent('openai/gpt-4o-mini', [fetchMCP, fileMCP], '', context)
+  const agent = new Agent('google/gemini-2.5-flash-lite', [fetchMCP, fileMCP], '', context)
 
   await agent.init()
   await agent.invoke(TASK)
@@ -55,7 +56,9 @@ async function main_local() {
   const context =
     'Bret is a woman who lives in a small town in the mountains. She is 30 years old and works as a teacher. She is married to a man named John and has two children, a son named James and a daughter named Emily. She is a very kind and caring person and is loved by all who know her.'
   // Agent - 使用本地模型
-  const agent = new Agent('qwen3-30b-a3b', [fetchMCP, fileMCP], '', context)
+  // const agent = new Agent('claude-3.7-sonnet', [], '', context)
+  // const agent = new Agent('qwen3-30b-a3b', [fetchMCP, fileMCP], '', context)
+  const agent = new Agent('qwen3-235b-a22b', [fetchMCP, fileMCP], '', context)
   await agent.init()
   await agent.invoke(TASK)
   await agent.close()
@@ -70,9 +73,9 @@ async function main_fetch() {
   await agent.close()
 }
 
-// main_paid()
+main_paid()
 // main_free()
-main_local()
+// main_local()
 // main_fetch()
 
 async function retrieveContext() {

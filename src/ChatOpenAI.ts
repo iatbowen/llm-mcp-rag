@@ -40,7 +40,7 @@ export default class ChatOpenAI {
         stream: true,
         tools: this.getToolsDefinition(),
       })
-      console.log('processing data...')
+      console.log('processing data...', JSON.stringify(stream))
       for await (const message of this.fromChatResponse(stream)) {
         if (message.content) {
           yield { content: message.content?.toString() || '', toolCalls: [] }
@@ -81,6 +81,7 @@ export default class ChatOpenAI {
       // 处理ToolCall - 累积数据，不立即返回
       if (delta.tool_calls && delta.tool_calls.length > 0) {
         for (const toolCallChunk of delta.tool_calls) {
+          console.log('toolCallChunk:', toolCallChunk)
           if (toolCallChunk.index === undefined) {
             console.warn('Warning: toolCallChunk.index is undefined')
             continue
