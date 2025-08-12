@@ -2,16 +2,9 @@ import OpenAI from 'openai'
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
 import 'dotenv/config'
 import { logTitle } from './utils'
+import { LLMInterface, ToolCall } from './LLMInterface'
 
-export interface ToolCall {
-  id: string
-  function: {
-    name: string
-    arguments: string
-  }
-}
-
-export default class ChatOpenAI {
+export default class ChatOpenAI implements LLMInterface {
   private llm: OpenAI
   private model: string
   private messages: OpenAI.Chat.ChatCompletionMessageParam[] = []
@@ -81,7 +74,6 @@ export default class ChatOpenAI {
       // 处理ToolCall - 累积数据，不立即返回
       if (delta.tool_calls && delta.tool_calls.length > 0) {
         for (const toolCallChunk of delta.tool_calls) {
-          console.log('toolCallChunk:', toolCallChunk)
           if (toolCallChunk.index === undefined) {
             console.warn('Warning: toolCallChunk.index is undefined')
             continue

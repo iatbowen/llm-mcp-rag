@@ -1,10 +1,12 @@
 import MCPClient from './MCPClient'
 import ChatOpenAI from './ChatOpenAI'
+import ChatAnthropicAI from './ChatAnthropicAI'
+import { LLMInterface } from './LLMInterface'
 import { logTitle } from './utils'
 
 export default class Agent {
   private mcpClients: MCPClient[]
-  private llm: ChatOpenAI | null = null
+  private llm: LLMInterface | null = null
   private model: string
   private systemPrompt: string
   private context: string
@@ -24,7 +26,12 @@ export default class Agent {
       await client.init()
     }
     const tools = this.mcpClients.flatMap(client => client.getTools())
-    this.llm = new ChatOpenAI(this.model, this.systemPrompt, tools, this.context)
+
+    if (this.model === 'claude-3.7-sonnet') {
+      this.llm = new ChatAnthropicAI(this.model, this.systemPrompt, tools, this.context)
+    } else {
+      this.llm = new ChatOpenAI(this.model, this.systemPrompt, tools, this.context)
+    }
   }
 
   async close() {
